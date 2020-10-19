@@ -47,7 +47,7 @@ func SendMessageZabbix(message ZabbixMessage, logsign string) string {
 		ret = PostToFeiShuv2(message.ZabbixMessage, message.ZabbixTarget, logsign)
 	//腾讯云短信
 	case "txdx":
-		ret = PostTXmessage(message.ZabbixMessage, message.ZabbixTarget, logsign)
+		ret = PostTXmessage([]string{message.ZabbixMessage}, message.ZabbixTarget, logsign)
 	//华为云短信
 	case "hwdx":
 		ret = ret + PostHWmessage(message.ZabbixMessage, message.ZabbixTarget, logsign)

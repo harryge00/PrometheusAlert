@@ -214,7 +214,7 @@ func SendMessageG3(message Graylog3, typeid int, logsign, ddurl, wxurl, fsurl, t
 			if txdx == "" {
 				txdx = GetUserPhone(1)
 			}
-			PostTXmessage(PhoneCallMessage, txdx, logsign)
+			PostTXmessage([]string{PhoneCallMessage}, txdx, logsign)
 		}
 		//触发华为云短信告警
 		if typeid == 6 {

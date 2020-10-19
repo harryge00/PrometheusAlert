@@ -3,9 +3,9 @@ package controllers
 import (
 	"PrometheusAlert/model"
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strconv"
-	"strings"
 
 	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/logs"
@@ -15,9 +15,16 @@ type PrometheusController struct {
 	beego.Controller
 }
 
+
 type Labels struct {
 	Alertname string `json:"alertname"`
 	Instance  string `json:"instance"`
+	InstanceID  string `json:"instance_id,omitempty"`
+	InstanceID2  string `json:"instanceid,omitempty"` // 腾讯云redis
+	InstanceName  string `json:"instance_name,omitempty"`
+	Host  string `json:"host,omitempty"`
+	ServiceName  string `json:"service_name,omitempty"`
+	TaskName  string `json:"task_name,omitempty"`
 	Level     string `json:"level"` //2019年11月20日 16:03:10更改告警级别定义位置,适配prometheus alertmanager rule
 }
 type Annotations struct {
@@ -87,150 +94,80 @@ func (c *PrometheusController) PrometheusRouter() {
 func SendMessageR(message Prometheus, rwxurl, rddurl, rfsurl, rphone, remail, logsign string) string {
 	//增加日志标志  方便查询日志
 
-	Title := beego.AppConfig.String("title")
-	Logourl := beego.AppConfig.String("logourl")
-	Rlogourl := beego.AppConfig.String("rlogourl")
 	Messagelevel, _ := beego.AppConfig.Int("messagelevel")
 	PhoneCalllevel, _ := beego.AppConfig.Int("phonecalllevel")
 	PhoneCallResolved, _ := beego.AppConfig.Int("phonecallresolved")
 	Silent, _ := beego.AppConfig.Int("silent")
-	PCstTime, _ := beego.AppConfig.Int("prometheus_cst_time")
-	var ddtext, wxtext, fstext, MobileMessage, PhoneCallMessage, EmailMessage, titleend string
+	//var ddtext, wxtext, fstext, MobileMessage, PhoneCallMessage, EmailMessage, titleend string
+	var MobileMessages []string
 	//对分组消息进行排序
 	AlerMessage := message.Alerts
 	sort.Sort(AlerMessages(AlerMessage))
 	//告警级别定义 0 信息,1 警告,2 一般严重,3 严重,4 灾难
-	AlertLevel := []string{"信息", "警告", "一般严重", "严重", "灾难"}
 	//遍历消息
 	for _, RMessage := range AlerMessage {
 		nLevel, _ := strconv.Atoi(RMessage.Labels.Level)
-		At := RMessage.StartsAt
-		Et := RMessage.EndsAt
-		if PCstTime == 1 {
-			At = GetCSTtime(RMessage.StartsAt)
-			Et = GetCSTtime(RMessage.EndsAt)
+
+		MobileMessages = []string{
+			RMessage.Labels.Alertname,
 		}
-		if RMessage.Status == "resolved" {
-			titleend = "故障恢复信息"
-			model.AlertsFromCounter.WithLabelValues("prometheus", RMessage.Annotations.Description, RMessage.Labels.Level, RMessage.Labels.Instance, "resolved").Add(1)
-			ddtext = "## [" + Title + "Prometheus" + titleend + "](" + RMessage.GeneratorUrl + ")\n\n" + "#### [" + RMessage.Labels.Alertname + "](" + message.Externalurl + ")\n\n" + "###### 告警级别：" + AlertLevel[nLevel] + "\n\n" + "###### 开始时间：" + At + "\n\n" + "###### 结束时间：" + Et + "\n\n" + "###### 故障主机IP：" + RMessage.Labels.Instance + "\n\n" + "##### " + RMessage.Annotations.Description + "\n\n" + "![" + Title + "](" + Rlogourl + ")"
-			fstext = "## [" + Title + "Prometheus" + titleend + "](" + RMessage.GeneratorUrl + ")\n\n" + "#### [" + RMessage.Labels.Alertname + "](" + message.Externalurl + ")\n\n" + "###### 告警级别：" + AlertLevel[nLevel] + "\n\n" + "###### 开始时间：" + At + "\n\n" + "###### 结束时间：" + Et + "\n\n" + "###### 故障主机IP：" + RMessage.Labels.Instance + "\n\n" + "##### " + RMessage.Annotations.Description + "\n\n" + "![" + Title + "](" + Rlogourl + ")"
-			wxtext = "[" + Title + "Prometheus" + titleend + "](" + RMessage.GeneratorUrl + ")\n>**[" + RMessage.Labels.Alertname + "](" + message.Externalurl + ")**\n>`告警级别:`" + AlertLevel[nLevel] + "\n`开始时间:`" + At + "\n`结束时间:`" + Et + "\n`故障主机IP:`" + RMessage.Labels.Instance + "\n**" + RMessage.Annotations.Description + "**"
-			MobileMessage = "\n[" + Title + "Prometheus" + titleend + "]\n" + RMessage.Labels.Alertname + "\n" + "告警级别：" + AlertLevel[nLevel] + "\n" + "故障主机IP：" + RMessage.Labels.Instance + "\n" + RMessage.Annotations.Description
-			PhoneCallMessage = "故障主机IP " + RMessage.Labels.Instance + RMessage.Annotations.Description + "已经恢复"
-			EmailMessage = `<h1><a href =` + RMessage.GeneratorUrl + `>` + Title + "Prometheus" + titleend + `</a></h1>
-				<h2><a href ` + message.Externalurl + `>` + RMessage.Labels.Alertname + `</a></h2>
-				<h5>告警级别：` + AlertLevel[nLevel] + `</h5>
-				<h5>开始时间：` + At + `</h5>
-				<h5>结束时间：` + Et + `</h5>
-				<h5>故障主机IP：` + RMessage.Labels.Instance + `</h5>
-				<h3>` + RMessage.Annotations.Description + `</h3>
-				<img src=` + Rlogourl + ` />`
+		if RMessage.Annotations.Summary != "" {
+			MobileMessages = append(MobileMessages, RMessage.Annotations.Summary)
+		} else if RMessage.Annotations.Description != "" {
+			MobileMessages = append(MobileMessages, RMessage.Annotations.Description)
 		} else {
-			titleend = "故障告警信息"
-			model.AlertsFromCounter.WithLabelValues("prometheus", RMessage.Annotations.Description, RMessage.Labels.Level, RMessage.Labels.Instance, "firing").Add(1)
-			ddtext = "## [" + Title + "Prometheus" + titleend + "](" + RMessage.GeneratorUrl + ")\n\n" + "#### [" + RMessage.Labels.Alertname + "](" + message.Externalurl + ")\n\n" + "###### 告警级别：" + AlertLevel[nLevel] + "\n\n" + "###### 开始时间：" + At + "\n\n" + "###### 结束时间：" + Et + "\n\n" + "###### 故障主机IP：" + RMessage.Labels.Instance + "\n\n" + "##### " + RMessage.Annotations.Description + "\n\n" + "![" + Title + "](" + Logourl + ")"
-			fstext = "## [" + Title + "Prometheus" + titleend + "](" + RMessage.GeneratorUrl + ")\n\n" + "#### [" + RMessage.Labels.Alertname + "](" + message.Externalurl + ")\n\n" + "###### 告警级别：" + AlertLevel[nLevel] + "\n\n" + "###### 开始时间：" + At + "\n\n" + "###### 结束时间：" + Et + "\n\n" + "###### 故障主机IP：" + RMessage.Labels.Instance + "\n\n" + "##### " + RMessage.Annotations.Description + "\n\n" + "![" + Title + "](" + Logourl + ")"
-			wxtext = "[" + Title + "Prometheus" + titleend + "](" + RMessage.GeneratorUrl + ")\n>**[" + RMessage.Labels.Alertname + "](" + message.Externalurl + ")**\n>`告警级别:`" + AlertLevel[nLevel] + "\n`开始时间:`" + At + "\n`结束时间:`" + Et + "\n`故障主机IP:`" + RMessage.Labels.Instance + "\n**" + RMessage.Annotations.Description + "**"
-			MobileMessage = "\n[" + Title + "Prometheus" + titleend + "]\n" + RMessage.Labels.Alertname + "\n" + "告警级别：" + AlertLevel[nLevel] + "\n" + "故障主机IP：" + RMessage.Labels.Instance + "\n" + RMessage.Annotations.Description
-			PhoneCallMessage = "故障主机IP " + RMessage.Labels.Instance + RMessage.Annotations.Description
-			EmailMessage = `<h1><a href =` + RMessage.GeneratorUrl + `>` + Title + "Prometheus" + titleend + `</a></h1>
-				<h2><a href ` + message.Externalurl + `>` + RMessage.Labels.Alertname + `</a></h2>
-				<h5>告警级别：` + AlertLevel[nLevel] + `</h5>
-				<h5>开始时间：` + At + `</h5>
-				<h5>结束时间：` + Et + `</h5>
-				<h5>故障主机IP：` + RMessage.Labels.Instance + `</h5>
-				<h3>` + RMessage.Annotations.Description + `</h3>
-				<img src=` + Logourl + ` />`
-		}
-		//发送消息到钉钉
-		if rddurl == "" && RMessage.Annotations.Ddurl == "" {
-			url := beego.AppConfig.String("ddurl")
-			PostToDingDing(Title+titleend, ddtext, url, logsign)
-		} else {
-			if rddurl != "" {
-				Ddurl := strings.Split(rddurl, ",")
-				for _, url := range Ddurl {
-					PostToDingDing(Title+titleend, ddtext, url, logsign)
-				}
-			}
-			if RMessage.Annotations.Ddurl != "" {
-				Ddurl := strings.Split(RMessage.Annotations.Ddurl, ",")
-				for _, url := range Ddurl {
-					PostToDingDing(Title+titleend, ddtext, url, logsign)
-				}
-			}
+			MobileMessages = append(MobileMessages, RMessage.Labels.Alertname)
 		}
 
-		//发送消息到微信
-		if rwxurl == "" && RMessage.Annotations.Wxurl == "" {
-			url := beego.AppConfig.String("wxurl")
-			PostToWeiXin(wxtext, url, logsign)
+		if RMessage.Labels.TaskName != "" {
+			// DCOS Container alerts
+			// service_name="/ntt/ds-kafka",task_name="kafka-0-broker"
+			MobileMessages = append(MobileMessages, RMessage.Labels.Instance, fmt.Sprintf("%s: %s", RMessage.Labels.ServiceName, RMessage.Labels.TaskName))
+		} else if RMessage.Labels.InstanceName != ""  {
+			// Tencent cloud alert
+			if RMessage.Labels.InstanceID != "" {
+				MobileMessages = append(MobileMessages, RMessage.Labels.InstanceID, RMessage.Labels.InstanceName)
+			} else {
+				MobileMessages = append(MobileMessages, RMessage.Labels.InstanceID2, RMessage.Labels.InstanceName)
+			}
 		} else {
-			if rwxurl != "" {
-				Wxurl := strings.Split(rwxurl, ",")
-				for _, url := range Wxurl {
-					PostToWeiXin(wxtext, url, logsign)
-				}
-			}
-			if RMessage.Annotations.Wxurl != "" {
-				Wxurl := strings.Split(RMessage.Annotations.Wxurl, ",")
-				for _, url := range Wxurl {
-					PostToWeiXin(wxtext, url, logsign)
-				}
-			}
+			// DCOS node alert
+			MobileMessages = append(MobileMessages, RMessage.Labels.Instance, RMessage.Labels.Host)
 		}
-		//发送消息到飞书
-		if rfsurl == "" && RMessage.Annotations.Fsurl == "" {
-			url := beego.AppConfig.String("fsurl")
-			PostToFeiShu(Title+titleend, fstext, url, logsign)
+		MobileMessages = append(MobileMessages, RMessage.StartsAt)
+
+		if RMessage.Status == "resolved" {
+			model.AlertsFromCounter.WithLabelValues("prometheus", RMessage.Annotations.Description, RMessage.Labels.Level, RMessage.Labels.Instance, "resolved").Add(1)
+			// 发生告警(1),告警内容:(2),实例ID:(3),实例名:(4),触发时间:(5),请及时处理
+			MobileMessages[0] += "已恢复"
+			//MobileMessage = "\n[" + Title + "Prometheus" + titleend + "]\n" + RMessage.Labels.Alertname + "\n" + "告警级别：" + AlertLevel[nLevel] + "\n" + "故障主机IP：" + RMessage.Labels.Instance + "\n" + RMessage.Annotations.Description
+			PhoneCallMessage = "故障主机IP " + RMessage.Labels.Instance + RMessage.Annotations.Description + "已经恢复"
+
 		} else {
-			if rfsurl != "" {
-				Fsurl := strings.Split(rfsurl, ",")
-				for _, url := range Fsurl {
-					PostToFeiShu(Title+titleend, fstext, url, logsign)
-				}
-			}
-			if RMessage.Annotations.Fsurl != "" {
-				Fsurl := strings.Split(RMessage.Annotations.Fsurl, ",")
-				for _, url := range Fsurl {
-					PostToFeiShu(Title+titleend, fstext, url, logsign)
-				}
-			}
+			model.AlertsFromCounter.WithLabelValues("prometheus", RMessage.Annotations.Description, RMessage.Labels.Level, RMessage.Labels.Instance, "firing").Add(1)
+			PhoneCallMessage = "故障主机IP " + RMessage.Labels.Instance + RMessage.Annotations.Description
 		}
-		//发送消息到Email
-		if remail == "" && RMessage.Annotations.Email == "" {
-			Emails := beego.AppConfig.String("Default_emails")
-			SendEmail(EmailMessage, Emails, logsign)
-		} else {
-			if remail != "" {
-				SendEmail(EmailMessage, remail, logsign)
-			}
-			if RMessage.Annotations.Email != "" {
-				Emails := RMessage.Annotations.Email
-				SendEmail(EmailMessage, Emails, logsign)
-			}
-		}
+
 		//发送消息到短信
 		if nLevel == Messagelevel {
 			if rphone == "" && RMessage.Annotations.Mobile == "" {
 				phone := GetUserPhone(1)
-				PostTXmessage(MobileMessage, phone, logsign)
-				PostHWmessage(MobileMessage, phone, logsign)
-				PostALYmessage(MobileMessage, phone, logsign)
-				Post7MOORmessage(MobileMessage, phone, logsign)
+				PostTXmessage(MobileMessages, phone, logsign)
+				//PostHWmessage(MobileMessage, phone, logsign)
+				//PostALYmessage(MobileMessage, phone, logsign)
+				//Post7MOORmessage(MobileMessage, phone, logsign)
 			} else {
 				if rphone != "" {
-					PostTXmessage(MobileMessage, rphone, logsign)
-					PostHWmessage(MobileMessage, rphone, logsign)
-					PostALYmessage(MobileMessage, rphone, logsign)
-					Post7MOORmessage(MobileMessage, rphone, logsign)
+					PostTXmessage(MobileMessages, rphone, logsign)
+					//PostHWmessage(MobileMessage, rphone, logsign)
+					//PostALYmessage(MobileMessage, rphone, logsign)
+					//Post7MOORmessage(MobileMessage, rphone, logsign)
 				}
 				if RMessage.Annotations.Mobile != "" {
-					PostTXmessage(MobileMessage, RMessage.Annotations.Mobile, logsign)
-					PostHWmessage(MobileMessage, RMessage.Annotations.Mobile, logsign)
-					PostALYmessage(MobileMessage, RMessage.Annotations.Mobile, logsign)
-					Post7MOORmessage(MobileMessage, RMessage.Annotations.Mobile, logsign)
+					PostTXmessage(MobileMessages, RMessage.Annotations.Mobile, logsign)
+					//PostHWmessage(MobileMessage, RMessage.Annotations.Mobile, logsign)
+					//PostALYmessage(MobileMessage, RMessage.Annotations.Mobile, logsign)
+					//Post7MOORmessage(MobileMessage, RMessage.Annotations.Mobile, logsign)
 				}
 			}
 		}
@@ -243,21 +180,21 @@ func SendMessageR(message Prometheus, rwxurl, rddurl, rfsurl, rphone, remail, lo
 				if rphone == "" && RMessage.Annotations.Mobile == "" {
 					phone := GetUserPhone(1)
 					PostTXphonecall(PhoneCallMessage, phone, logsign)
-					PostALYphonecall(PhoneCallMessage, phone, logsign)
-					PostRLYphonecall(PhoneCallMessage, phone, logsign)
-					Post7MOORphonecall(PhoneCallMessage, phone, logsign)
+					//PostALYphonecall(PhoneCallMessage, phone, logsign)
+					//PostRLYphonecall(PhoneCallMessage, phone, logsign)
+					//Post7MOORphonecall(PhoneCallMessage, phone, logsign)
 				} else {
 					if rphone != "" {
 						PostTXphonecall(PhoneCallMessage, rphone, logsign)
-						PostALYphonecall(PhoneCallMessage, rphone, logsign)
-						PostRLYphonecall(PhoneCallMessage, rphone, logsign)
-						Post7MOORphonecall(PhoneCallMessage, rphone, logsign)
+						//PostALYphonecall(PhoneCallMessage, rphone, logsign)
+						//PostRLYphonecall(PhoneCallMessage, rphone, logsign)
+						//Post7MOORphonecall(PhoneCallMessage, rphone, logsign)
 					}
 					if RMessage.Annotations.Mobile != "" {
 						PostTXphonecall(PhoneCallMessage, RMessage.Annotations.Mobile, logsign)
-						PostALYphonecall(PhoneCallMessage, RMessage.Annotations.Mobile, logsign)
-						PostRLYphonecall(PhoneCallMessage, RMessage.Annotations.Mobile, logsign)
-						Post7MOORphonecall(PhoneCallMessage, RMessage.Annotations.Mobile, logsign)
+						//PostALYphonecall(PhoneCallMessage, RMessage.Annotations.Mobile, logsign)
+						//PostRLYphonecall(PhoneCallMessage, RMessage.Annotations.Mobile, logsign)
+						//Post7MOORphonecall(PhoneCallMessage, RMessage.Annotations.Mobile, logsign)
 					}
 				}
 			}

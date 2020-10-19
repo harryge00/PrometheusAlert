@@ -42,7 +42,7 @@ type TXmessage struct {
 }
 
 //腾讯短信子程序
-func PostTXmessage(Messages string, PhoneNumbers, logsign string) string {
+func PostTXmessage(Messages []string, PhoneNumbers, logsign string) string {
 	open := beego.AppConfig.String("open-txdx")
 	if open == "0" {
 		logs.Info(logsign, "[txmessage]", "腾讯短信接口未配置未开启状态,请先配置open-txdx为1")
@@ -70,7 +70,7 @@ func PostTXmessage(Messages string, PhoneNumbers, logsign string) string {
 	u := TXmessage{
 		Ext:    logsign,
 		Extend: "",
-		Params: []string{Messages},
+		Params: Messages,
 		Sig:    sig,
 		Sign:   sign,
 		Tel:    TXmobiles,
@@ -111,7 +111,7 @@ func PostTXmessage(Messages string, PhoneNumbers, logsign string) string {
 		logs.Error(logsign, "[txmessage]", err.Error())
 	}
 
-	model.AlertToCounter.WithLabelValues("txdx", Messages, PhoneNumbers).Add(1)
+	model.AlertToCounter.WithLabelValues("txdx", Messages[0], PhoneNumbers).Add(1)
 	logs.Info(logsign, "[txmessage]", string(result))
 	return string(result)
 }

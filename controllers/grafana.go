@@ -204,7 +204,7 @@ func SendMessageGrafana(message Grafana, typeid int, logsign, ddurl, wxurl, fsur
 		if txdx == "" {
 			txdx = GetUserPhone(1)
 		}
-		PostTXmessage(PhoneCallMessage, txdx, logsign)
+		PostTXmessage([]string{PhoneCallMessage}, txdx, logsign)
 	}
 	//触发华为云短信告警
 	if typeid == 6 {

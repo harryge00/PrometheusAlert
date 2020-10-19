@@ -212,7 +212,7 @@ func SendMessageG(message Graylog2, typeid int, logsign, ddurl, wxurl, fsurl, tx
 			if txdx == "" {
 				txdx = GetUserPhone(1)
 			}
-			PostTXmessage(PhoneCallMessage, txdx, logsign)
+			PostTXmessage([]string{PhoneCallMessage}, txdx, logsign)
 		}
 		//触发华为云短信告警
 		if typeid == 6 {

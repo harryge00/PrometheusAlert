@@ -87,7 +87,7 @@ func SendMessagePrometheusAlert(message, ptype, pddurl, pwxurl, pfsurl, pphone, 
 
 	//腾讯云短信
 	case "txdx":
-		ret = PostTXmessage(message, pphone, logsign)
+		ret = PostTXmessage([]string{message}, pphone, logsign)
 	//华为云短信
 	case "hwdx":
 		ret = ret + PostHWmessage(message, pphone, logsign)

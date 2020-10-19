@@ -123,7 +123,7 @@ func (c *MainController) AlertTest() {
 		c.Data["json"] = ret
 	case "txdx":
 		MobileMessage := "PrometheusAlertCenter测试告警"
-		ret := PostTXmessage(MobileMessage, beego.AppConfig.String("defaultphone"), logsign)
+		ret := PostTXmessage([]string{MobileMessage}, beego.AppConfig.String("defaultphone"), logsign)
 		c.Data["json"] = ret
 	case "txdh":
 		ret := PostTXphonecall("PrometheusAlertCenter测试告警", beego.AppConfig.String("defaultphone"), logsign)
